@@ -1,5 +1,6 @@
 #include "header.h"
 #include <SDL.h>
+#include <algorithm>
 
 /*
 NOTE : You are free to change the code as you wish, the main objective is to make the
@@ -53,6 +54,22 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::End();
 }
 
+// Global variables for memory window
+static char processFilter[256] = "";
+static vector<int> selectedProcesses;
+
+// Helper function to format bytes
+string formatMemoryBytes(long long bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+        return to_string(bytes / (1024 * 1024 * 1024)) + " GB";
+    } else if (bytes >= 1024 * 1024) {
+        return to_string(bytes / (1024 * 1024)) + " MB";
+    } else if (bytes >= 1024) {
+        return to_string(bytes / 1024) + " KB";
+    }
+    return to_string(bytes) + " B";
+}
+
 // memoryProcessesWindow, display information for the memory and processes information
 void memoryProcessesWindow(const char *id, ImVec2 size, ImVec2 position)
 {
@@ -60,7 +77,123 @@ void memoryProcessesWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::SetWindowSize(id, size);
     ImGui::SetWindowPos(id, position);
 
-    // student TODO : add code here for the memory and process information
+    // Memory Usage Section
+    ImGui::Text("Memory Usage");
+    ImGui::Separator();
+
+    // RAM Usage
+    MemoryInfo ramInfo = getMemoryInfo();
+    ImGui::Text("Physical Memory (RAM)");
+    ImGui::ProgressBar(ramInfo.percentage / 100.0f, ImVec2(0.0f, 0.0f),
+                      (formatMemoryBytes(ramInfo.used) + " / " + formatMemoryBytes(ramInfo.total) +
+                       " (" + to_string((int)ramInfo.percentage) + "%)").c_str());
+
+    // SWAP Usage
+    MemoryInfo swapInfo = getSwapInfo();
+    ImGui::Text("Virtual Memory (SWAP)");
+    if (swapInfo.total > 0) {
+        ImGui::ProgressBar(swapInfo.percentage / 100.0f, ImVec2(0.0f, 0.0f),
+                          (formatMemoryBytes(swapInfo.used) + " / " + formatMemoryBytes(swapInfo.total) +
+                           " (" + to_string((int)swapInfo.percentage) + "%)").c_str());
+    } else {
+        ImGui::Text("No swap configured");
+    }
+
+    // Disk Usage
+    DiskInfo diskInfo = getDiskInfo("/");
+    ImGui::Text("Disk Usage (/)");
+    ImGui::ProgressBar(diskInfo.percentage / 100.0f, ImVec2(0.0f, 0.0f),
+                      (formatMemoryBytes(diskInfo.used) + " / " + formatMemoryBytes(diskInfo.total) +
+                       " (" + to_string((int)diskInfo.percentage) + "%)").c_str());
+
+    ImGui::Spacing();
+
+    // Process Table Section
+    ImGui::Text("Process Table");
+    ImGui::Separator();
+
+    // Filter input
+    ImGui::Text("Filter:");
+    ImGui::SameLine();
+    ImGui::InputText("##filter", processFilter, sizeof(processFilter));
+
+    ImGui::Spacing();
+
+    // Process table
+    if (ImGui::BeginTable("ProcessTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                         ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable)) {
+
+        ImGui::TableSetupColumn("PID", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("CPU %", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        ImGui::TableSetupColumn("Memory %", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+        ImGui::TableHeadersRow();
+
+        vector<Proc> processes = getProcesses();
+        string filterStr = string(processFilter);
+
+        for (size_t i = 0; i < processes.size(); i++) {
+            const Proc& proc = processes[i];
+
+            // Apply filter
+            if (!filterStr.empty() && proc.name.find(filterStr) == string::npos) {
+                continue;
+            }
+
+            ImGui::TableNextRow();
+
+            // PID column
+            ImGui::TableSetColumnIndex(0);
+            bool isSelected = std::find(selectedProcesses.begin(), selectedProcesses.end(), proc.pid) != selectedProcesses.end();
+
+            if (ImGui::Selectable(to_string(proc.pid).c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns)) {
+                if (ImGui::GetIO().KeyCtrl) {
+                    // Multi-select with Ctrl
+                    if (isSelected) {
+                        selectedProcesses.erase(std::remove(selectedProcesses.begin(), selectedProcesses.end(), proc.pid),
+                                              selectedProcesses.end());
+                    } else {
+                        selectedProcesses.push_back(proc.pid);
+                    }
+                } else {
+                    // Single select
+                    selectedProcesses.clear();
+                    selectedProcesses.push_back(proc.pid);
+                }
+            }
+
+            // Name column
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%s", proc.name.c_str());
+
+            // State column
+            ImGui::TableSetColumnIndex(2);
+            ImGui::Text("%c", proc.state);
+
+            // CPU % column
+            ImGui::TableSetColumnIndex(3);
+            double cpuUsage = getProcessCPUUsage(proc.pid);
+            ImGui::Text("%.1f", cpuUsage);
+
+            // Memory % column
+            ImGui::TableSetColumnIndex(4);
+            double memUsage = getProcessMemoryUsage(proc.pid);
+            ImGui::Text("%.1f", memUsage);
+        }
+
+        ImGui::EndTable();
+    }
+
+    // Show selected processes info
+    if (!selectedProcesses.empty()) {
+        ImGui::Spacing();
+        ImGui::Text("Selected processes: %zu", selectedProcesses.size());
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Selection")) {
+            selectedProcesses.clear();
+        }
+    }
 
     ImGui::End();
 }
