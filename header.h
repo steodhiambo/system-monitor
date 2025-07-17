@@ -130,6 +130,21 @@ vector<Proc> getProcesses();
 double getProcessCPUUsage(int pid);
 double getProcessMemoryUsage(int pid);
 
-// student TODO : network
+// Network monitoring functions
+struct NetworkInterface {
+    string name;
+    string ip;
+    long long rx_bytes;
+    long long tx_bytes;
+    long long rx_packets;
+    long long tx_packets;
+    long long rx_errors;
+    long long tx_errors;
+    long long rx_dropped;
+    long long tx_dropped;
+};
+
+vector<NetworkInterface> getNetworkInterfaces();
+string formatBytes(long long bytes);
 
 #endif
