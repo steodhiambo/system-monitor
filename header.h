@@ -108,7 +108,27 @@ double getThermalTemp();
 string getFanStatus();
 int getFanSpeed();
 
-// student TODO : memory and processes
+// Memory and process monitoring functions
+struct MemoryInfo {
+    long long total;
+    long long available;
+    long long used;
+    double percentage;
+};
+
+struct DiskInfo {
+    long long total;
+    long long used;
+    long long available;
+    double percentage;
+};
+
+MemoryInfo getMemoryInfo();
+MemoryInfo getSwapInfo();
+DiskInfo getDiskInfo(const string& path = "/");
+vector<Proc> getProcesses();
+double getProcessCPUUsage(int pid);
+double getProcessMemoryUsage(int pid);
 
 // student TODO : network
 
