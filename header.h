@@ -96,55 +96,12 @@ struct RX
     int compressed;
 };
 
-// System information functions
+// student TODO : system stats
 string CPUinfo();
 const char *getOsName();
-string getHostname();
-string getLoggedUser();
-CPUStats getCPUStats();
-double calculateCPUUsage(const CPUStats& prev, const CPUStats& curr);
-vector<int> getTaskCounts(); // [running, sleeping, stopped, zombie]
-double getThermalTemp();
-string getFanStatus();
-int getFanSpeed();
 
-// Memory and process functions
-struct MemoryInfo {
-    long long total;
-    long long available;
-    long long used;
-    double percentage;
-};
+// student TODO : memory and processes
 
-struct DiskInfo {
-    long long total;
-    long long used;
-    long long available;
-    double percentage;
-};
-
-MemoryInfo getMemoryInfo();
-MemoryInfo getSwapInfo();
-DiskInfo getDiskInfo(const string& path = "/");
-vector<Proc> getProcesses();
-double getProcessCPUUsage(int pid);
-double getProcessMemoryUsage(int pid);
-
-// Network functions
-struct NetworkInterface {
-    string name;
-    string ip;
-    long long rx_bytes;
-    long long tx_bytes;
-    long long rx_packets;
-    long long tx_packets;
-    long long rx_errors;
-    long long tx_errors;
-    long long rx_dropped;
-    long long tx_dropped;
-};
-
-vector<NetworkInterface> getNetworkInterfaces();
-string formatBytes(long long bytes);
+// student TODO : network
 
 #endif
