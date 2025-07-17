@@ -1,4 +1,7 @@
 #include "header.h"
+#include <string.h>
+#include <pwd.h>
+#include <sstream>
 
 // get cpu id and information, you can use `proc/cpuinfo`
 string CPUinfo()
@@ -48,4 +51,153 @@ const char *getOsName()
 #else
     return "Other";
 #endif
+}
+
+// Get hostname of the computer
+string getHostname()
+{
+    char hostname[HOST_NAME_MAX + 1];
+    if (gethostname(hostname, sizeof(hostname)) == 0) {
+        return string(hostname);
+    }
+    return "Unknown";
+}
+
+// Get logged in user
+string getLoggedUser()
+{
+    uid_t uid = getuid();
+    struct passwd *pw = getpwuid(uid);
+    if (pw) {
+        return string(pw->pw_name);
+    }
+    return "Unknown";
+}
+
+// Read CPU stats from /proc/stat
+CPUStats getCPUStats()
+{
+    CPUStats stats = {0};
+    ifstream file("/proc/stat");
+    string line;
+
+    if (getline(file, line)) {
+        istringstream iss(line);
+        string cpu;
+        iss >> cpu >> stats.user >> stats.nice >> stats.system >> stats.idle
+            >> stats.iowait >> stats.irq >> stats.softirq >> stats.steal
+            >> stats.guest >> stats.guestNice;
+    }
+
+    return stats;
+}
+
+// Calculate CPU usage percentage
+double calculateCPUUsage(const CPUStats& prev, const CPUStats& curr)
+{
+    long long prevIdle = prev.idle + prev.iowait;
+    long long currIdle = curr.idle + curr.iowait;
+
+    long long prevNonIdle = prev.user + prev.nice + prev.system + prev.irq + prev.softirq + prev.steal;
+    long long currNonIdle = curr.user + curr.nice + curr.system + curr.irq + curr.softirq + curr.steal;
+
+    long long prevTotal = prevIdle + prevNonIdle;
+    long long currTotal = currIdle + currNonIdle;
+
+    long long totalDiff = currTotal - prevTotal;
+    long long idleDiff = currIdle - prevIdle;
+
+    if (totalDiff == 0) return 0.0;
+
+    return (double)(totalDiff - idleDiff) / totalDiff * 100.0;
+}
+
+// Get task counts from /proc/stat and process directories
+vector<int> getTaskCounts()
+{
+    vector<int> counts(4, 0); // [running, sleeping, stopped, zombie]
+
+    DIR* proc_dir = opendir("/proc");
+    if (!proc_dir) return counts;
+
+    struct dirent* entry;
+    while ((entry = readdir(proc_dir)) != nullptr) {
+        // Check if directory name is a number (PID)
+        if (strspn(entry->d_name, "0123456789") == strlen(entry->d_name)) {
+            string stat_path = "/proc/" + string(entry->d_name) + "/stat";
+            ifstream stat_file(stat_path);
+
+            if (stat_file.is_open()) {
+                string line;
+                getline(stat_file, line);
+
+                // Parse the state field (3rd field after PID and comm)
+                istringstream iss(line);
+                string pid, comm, state;
+                iss >> pid >> comm >> state;
+
+                if (!state.empty()) {
+                    char s = state[0];
+                    switch (s) {
+                        case 'R': counts[0]++; break; // Running
+                        case 'S': case 'D': counts[1]++; break; // Sleeping
+                        case 'T': case 't': counts[2]++; break; // Stopped
+                        case 'Z': counts[3]++; break; // Zombie
+                    }
+                }
+            }
+        }
+    }
+
+    closedir(proc_dir);
+    return counts;
+}
+
+// Get thermal temperature
+double getThermalTemp()
+{
+    ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
+    if (temp_file.is_open()) {
+        int temp_millidegrees;
+        temp_file >> temp_millidegrees;
+        return temp_millidegrees / 1000.0; // Convert to Celsius
+    }
+    return 0.0;
+}
+
+// Get fan status
+string getFanStatus()
+{
+    ifstream fan_file("/proc/acpi/fan/FAN0/state");
+    if (fan_file.is_open()) {
+        string line;
+        getline(fan_file, line);
+        if (line.find("on") != string::npos) {
+            return "Active";
+        } else if (line.find("off") != string::npos) {
+            return "Inactive";
+        }
+    }
+    return "Unknown";
+}
+
+// Get fan speed (RPM)
+int getFanSpeed()
+{
+    // Try different possible fan speed locations
+    vector<string> fan_paths = {
+        "/sys/class/hwmon/hwmon0/fan1_input",
+        "/sys/class/hwmon/hwmon1/fan1_input",
+        "/sys/class/hwmon/hwmon2/fan1_input"
+    };
+
+    for (const string& path : fan_paths) {
+        ifstream fan_file(path);
+        if (fan_file.is_open()) {
+            int speed;
+            fan_file >> speed;
+            return speed;
+        }
+    }
+    return 0;
 }

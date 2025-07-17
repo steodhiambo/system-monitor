@@ -96,9 +96,17 @@ struct RX
     int compressed;
 };
 
-// student TODO : system stats
+// Core system information functions
 string CPUinfo();
 const char *getOsName();
+string getHostname();
+string getLoggedUser();
+CPUStats getCPUStats();
+double calculateCPUUsage(const CPUStats& prev, const CPUStats& curr);
+vector<int> getTaskCounts(); // [running, sleeping, stopped, zombie]
+double getThermalTemp();
+string getFanStatus();
+int getFanSpeed();
 
 // student TODO : memory and processes
 
