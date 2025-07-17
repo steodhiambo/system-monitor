@@ -306,6 +306,12 @@ void memoryProcessesWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::End();
 }
 
+// Helper function to calculate progress for network usage (0-2GB scale)
+float calculateNetworkProgress(long long bytes) {
+    const long long maxBytes = 2LL * 1024 * 1024 * 1024; // 2GB
+    return min(1.0f, (float)bytes / maxBytes);
+}
+
 // network, display information network information
 void networkWindow(const char *id, ImVec2 size, ImVec2 position)
 {
@@ -313,7 +319,155 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::SetWindowSize(id, size);
     ImGui::SetWindowPos(id, position);
 
-    // student TODO : add code here for the network information
+    // Network Interfaces Section
+    ImGui::Text("Network Interfaces");
+    ImGui::Separator();
+
+    vector<NetworkInterface> interfaces = getNetworkInterfaces();
+
+    for (const auto& iface : interfaces) {
+        ImGui::Text("Interface: %s", iface.name.c_str());
+        ImGui::SameLine();
+        ImGui::Text("IP: %s", iface.ip.c_str());
+    }
+
+    ImGui::Spacing();
+
+    // Tabbed section for RX and TX tables
+    if (ImGui::BeginTabBar("NetworkTabs")) {
+
+        // RX Tab
+        if (ImGui::BeginTabItem("RX (Receiver)")) {
+            if (ImGui::BeginTable("RXTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                 ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable)) {
+
+                ImGui::TableSetupColumn("Interface", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                ImGui::TableSetupColumn("Bytes", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Packets", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Errors", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Dropped", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("FIFO", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Frame", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Compressed", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                ImGui::TableSetupColumn("Multicast", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                ImGui::TableHeadersRow();
+
+                for (const auto& iface : interfaces) {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%s", iface.name.c_str());
+
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%s", formatBytes(iface.rx_bytes).c_str());
+
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::Text("%lld", iface.rx_packets);
+
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::Text("%lld", iface.rx_errors);
+
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::Text("%lld", iface.rx_dropped);
+
+                    // Note: FIFO, Frame, Compressed, Multicast would need additional parsing
+                    // For now, showing placeholder values
+                    ImGui::TableSetColumnIndex(5);
+                    ImGui::Text("0");
+
+                    ImGui::TableSetColumnIndex(6);
+                    ImGui::Text("0");
+
+                    ImGui::TableSetColumnIndex(7);
+                    ImGui::Text("0");
+
+                    ImGui::TableSetColumnIndex(8);
+                    ImGui::Text("0");
+                }
+
+                ImGui::EndTable();
+            }
+            ImGui::EndTabItem();
+        }
+
+        // TX Tab
+        if (ImGui::BeginTabItem("TX (Transmitter)")) {
+            if (ImGui::BeginTable("TXTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                 ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable)) {
+
+                ImGui::TableSetupColumn("Interface", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                ImGui::TableSetupColumn("Bytes", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                ImGui::TableSetupColumn("Packets", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Errors", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Dropped", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("FIFO", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Colls", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Carrier", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                ImGui::TableSetupColumn("Compressed", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                ImGui::TableHeadersRow();
+
+                for (const auto& iface : interfaces) {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%s", iface.name.c_str());
+
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%s", formatBytes(iface.tx_bytes).c_str());
+
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::Text("%lld", iface.tx_packets);
+
+                    ImGui::TableSetColumnIndex(3);
+                    ImGui::Text("%lld", iface.tx_errors);
+
+                    ImGui::TableSetColumnIndex(4);
+                    ImGui::Text("%lld", iface.tx_dropped);
+
+                    // Note: FIFO, Colls, Carrier, Compressed would need additional parsing
+                    // For now, showing placeholder values
+                    ImGui::TableSetColumnIndex(5);
+                    ImGui::Text("0");
+
+                    ImGui::TableSetColumnIndex(6);
+                    ImGui::Text("0");
+
+                    ImGui::TableSetColumnIndex(7);
+                    ImGui::Text("0");
+
+                    ImGui::TableSetColumnIndex(8);
+                    ImGui::Text("0");
+                }
+
+                ImGui::EndTable();
+            }
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::Spacing();
+
+    // Network Usage Visualization Section
+    ImGui::Text("Network Usage (0GB - 2GB scale)");
+    ImGui::Separator();
+
+    // RX Usage bars
+    ImGui::Text("RX (Received):");
+    for (const auto& iface : interfaces) {
+        float progress = calculateNetworkProgress(iface.rx_bytes);
+        string label = iface.name + " RX: " + formatBytes(iface.rx_bytes);
+        ImGui::ProgressBar(progress, ImVec2(0.0f, 0.0f), label.c_str());
+    }
+
+    ImGui::Spacing();
+
+    // TX Usage bars
+    ImGui::Text("TX (Transmitted):");
+    for (const auto& iface : interfaces) {
+        float progress = calculateNetworkProgress(iface.tx_bytes);
+        string label = iface.name + " TX: " + formatBytes(iface.tx_bytes);
+        ImGui::ProgressBar(progress, ImVec2(0.0f, 0.0f), label.c_str());
+    }
 
     ImGui::End();
 }
