@@ -108,6 +108,24 @@ double getThermalTemp();
 string getFanStatus();
 int getFanSpeed();
 
+// UI state management for graphs
+struct GraphData {
+    vector<float> values;
+    int max_values;
+    bool animate;
+    float fps;
+    float y_scale;
+
+    GraphData(int max = 100) : max_values(max), animate(true), fps(60.0f), y_scale(100.0f) {}
+
+    void addValue(float value) {
+        values.push_back(value);
+        if ((int)values.size() > max_values) {
+            values.erase(values.begin());
+        }
+    }
+};
+
 // student TODO : memory and processes
 
 // student TODO : network

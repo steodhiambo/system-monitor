@@ -41,6 +41,13 @@ using namespace gl;
 #include IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #endif
 
+// Global variables for system window state
+static CPUStats prevCPUStats = {0};
+static GraphData cpuGraph(100);
+static GraphData thermalGraph(100);
+static GraphData fanGraph(100);
+static bool firstRun = true;
+
 // systemWindow, display information for the system monitorization
 void systemWindow(const char *id, ImVec2 size, ImVec2 position)
 {
@@ -48,7 +55,108 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::SetWindowSize(id, size);
     ImGui::SetWindowPos(id, position);
 
-    // student TODO : add code here for the system window
+    // System Information Section
+    ImGui::Text("System Information");
+    ImGui::Separator();
+
+    ImGui::Text("OS: %s", getOsName());
+    ImGui::Text("User: %s", getLoggedUser().c_str());
+    ImGui::Text("Hostname: %s", getHostname().c_str());
+    ImGui::Text("CPU: %s", CPUinfo().c_str());
+
+    // Task counts
+    vector<int> taskCounts = getTaskCounts();
+    ImGui::Text("Tasks: %d running, %d sleeping, %d stopped, %d zombie",
+                taskCounts[0], taskCounts[1], taskCounts[2], taskCounts[3]);
+
+    ImGui::Spacing();
+
+    // Tabbed section for CPU, Fan, Thermal
+    if (ImGui::BeginTabBar("SystemTabs")) {
+
+        // CPU Tab
+        if (ImGui::BeginTabItem("CPU")) {
+            CPUStats currentCPU = getCPUStats();
+            double cpuUsage = 0.0;
+
+            if (!firstRun) {
+                cpuUsage = calculateCPUUsage(prevCPUStats, currentCPU);
+            }
+            prevCPUStats = currentCPU;
+            firstRun = false;
+
+            if (cpuGraph.animate) {
+                cpuGraph.addValue(cpuUsage);
+            }
+
+            ImGui::Text("CPU Usage: %.1f%%", cpuUsage);
+
+            // Graph controls
+            ImGui::Checkbox("Animate", &cpuGraph.animate);
+            ImGui::SliderFloat("FPS", &cpuGraph.fps, 1.0f, 120.0f);
+            ImGui::SliderFloat("Y Scale", &cpuGraph.y_scale, 50.0f, 200.0f);
+
+            // CPU Graph
+            if (!cpuGraph.values.empty()) {
+                ImGui::PlotLines("CPU Usage", cpuGraph.values.data(), cpuGraph.values.size(),
+                               0, nullptr, 0.0f, cpuGraph.y_scale, ImVec2(0, 80));
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        // Fan Tab
+        if (ImGui::BeginTabItem("Fan")) {
+            string fanStatus = getFanStatus();
+            int fanSpeed = getFanSpeed();
+
+            ImGui::Text("Fan Status: %s", fanStatus.c_str());
+            ImGui::Text("Fan Speed: %d RPM", fanSpeed);
+
+            if (fanGraph.animate) {
+                fanGraph.addValue(fanSpeed);
+            }
+
+            // Graph controls
+            ImGui::Checkbox("Animate##Fan", &fanGraph.animate);
+            ImGui::SliderFloat("FPS##Fan", &fanGraph.fps, 1.0f, 120.0f);
+            ImGui::SliderFloat("Y Scale##Fan", &fanGraph.y_scale, 1000.0f, 5000.0f);
+
+            // Fan Speed Graph
+            if (!fanGraph.values.empty()) {
+                ImGui::PlotLines("Fan Speed", fanGraph.values.data(), fanGraph.values.size(),
+                               0, nullptr, 0.0f, fanGraph.y_scale, ImVec2(0, 80));
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        // Thermal Tab
+        if (ImGui::BeginTabItem("Thermal")) {
+            double temperature = getThermalTemp();
+
+            ImGui::Text("Temperature: %.1f°C", temperature);
+
+            if (thermalGraph.animate) {
+                thermalGraph.addValue(temperature);
+            }
+
+            // Graph controls
+            ImGui::Checkbox("Animate##Thermal", &thermalGraph.animate);
+            ImGui::SliderFloat("FPS##Thermal", &thermalGraph.fps, 1.0f, 120.0f);
+            ImGui::SliderFloat("Y Scale##Thermal", &thermalGraph.y_scale, 50.0f, 150.0f);
+
+            // Temperature Graph
+            if (!thermalGraph.values.empty()) {
+                ImGui::PlotLines("Temperature", thermalGraph.values.data(), thermalGraph.values.size(),
+                               0, nullptr, 0.0f, thermalGraph.y_scale, ImVec2(0, 80));
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
 
     ImGui::End();
 }
