@@ -57,10 +57,13 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::SetWindowPos(id, position);
 
     // System Information Section
-    ImGui::Text("System Information");
+    ImGui::Separator();
+    ImGui::Text("=== SYSTEM INFORMATION ===");
+    ImGui::Separator();
+    ImGui::Spacing();
     ImGui::Separator();
 
-    ImGui::Text("OS: %s", getOsName());
+    ImGui::Text("Operating System: %s", getOsName());
     ImGui::Text("User: %s", getLoggedUser().c_str());
     ImGui::Text("Hostname: %s", getHostname().c_str());
     ImGui::Text("CPU: %s", CPUinfo().c_str());
@@ -69,7 +72,12 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
     vector<int> taskCounts = getTaskCounts();
     ImGui::Text("Tasks: %d running, %d sleeping, %d stopped, %d zombie",
                 taskCounts[0], taskCounts[1], taskCounts[2], taskCounts[3]);
+    ImGui::Text("Total Tasks: %d", taskCounts[0] + taskCounts[1] + taskCounts[2] + taskCounts[3]);
 
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("=== SYSTEM MONITORING TABS ===");
+    ImGui::Separator();
     ImGui::Spacing();
 
     // Tabbed section for CPU, Fan, Thermal
@@ -168,12 +176,15 @@ static vector<int> selectedProcesses;
 
 // Helper function to format bytes
 string formatMemoryBytes(long long bytes) {
-    if (bytes >= 1024 * 1024 * 1024) {
-        return to_string(bytes / (1024 * 1024 * 1024)) + " GB";
+    if (bytes >= 1024LL * 1024 * 1024) {
+        double gb = (double)bytes / (1024.0 * 1024.0 * 1024.0);
+        return to_string((int)round(gb)) + " GB";
     } else if (bytes >= 1024 * 1024) {
-        return to_string(bytes / (1024 * 1024)) + " MB";
+        double mb = (double)bytes / (1024.0 * 1024.0);
+        return to_string((int)round(mb)) + " MB";
     } else if (bytes >= 1024) {
-        return to_string(bytes / 1024) + " KB";
+        double kb = (double)bytes / 1024.0;
+        return to_string((int)round(kb)) + " KB";
     }
     return to_string(bytes) + " B";
 }
@@ -186,7 +197,10 @@ void memoryProcessesWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::SetWindowPos(id, position);
 
     // Memory Usage Section
-    ImGui::Text("Memory Usage");
+    ImGui::Separator();
+    ImGui::Text("=== MEMORY AND PROCESS MONITOR ===");
+    ImGui::Separator();
+    ImGui::Spacing();
     ImGui::Separator();
 
     // RAM Usage
@@ -320,7 +334,10 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
     ImGui::SetWindowPos(id, position);
 
     // Network Interfaces Section
-    ImGui::Text("Network Interfaces");
+    ImGui::Separator();
+    ImGui::Text("=== NETWORK MONITOR ===");
+    ImGui::Separator();
+    ImGui::Spacing();
     ImGui::Separator();
 
     vector<NetworkInterface> interfaces = getNetworkInterfaces();
@@ -338,6 +355,29 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
 
         // RX Tab
         if (ImGui::BeginTabItem("RX (Receiver)")) {
+            // Visual representation with progress bars
+            ImGui::Text("=== NETWORK RECEIVER (RX) VISUAL USAGE ===");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            for (const auto& iface : interfaces) {
+                ImGui::Text("Interface: %s", iface.name.c_str());
+
+                // Calculate progress (scale to 0-2GB range for visualization)
+                double maxBytes = 2.0 * 1024 * 1024 * 1024; // 2GB max scale
+                float progress = (float)(iface.rx_bytes / maxBytes);
+                if (progress > 1.0f) progress = 1.0f;
+
+                // Progress bar with current bytes
+                ImGui::ProgressBar(progress, ImVec2(0.0f, 0.0f),
+                                 (formatBytes(iface.rx_bytes) + " received").c_str());
+                ImGui::Spacing();
+            }
+
+            ImGui::Separator();
+            ImGui::Text("=== DETAILED RX DATA TABLE ===");
+            ImGui::Spacing();
+
             if (ImGui::BeginTable("RXTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                  ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable)) {
 
@@ -391,6 +431,29 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
 
         // TX Tab
         if (ImGui::BeginTabItem("TX (Transmitter)")) {
+            // Visual representation with progress bars
+            ImGui::Text("=== NETWORK TRANSMITTER (TX) VISUAL USAGE ===");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            for (const auto& iface : interfaces) {
+                ImGui::Text("Interface: %s", iface.name.c_str());
+
+                // Calculate progress (scale to 0-2GB range for visualization)
+                double maxBytes = 2.0 * 1024 * 1024 * 1024; // 2GB max scale
+                float progress = (float)(iface.tx_bytes / maxBytes);
+                if (progress > 1.0f) progress = 1.0f;
+
+                // Progress bar with current bytes
+                ImGui::ProgressBar(progress, ImVec2(0.0f, 0.0f),
+                                 (formatBytes(iface.tx_bytes) + " transmitted").c_str());
+                ImGui::Spacing();
+            }
+
+            ImGui::Separator();
+            ImGui::Text("=== DETAILED TX DATA TABLE ===");
+            ImGui::Spacing();
+
             if (ImGui::BeginTable("TXTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                  ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable)) {
 
@@ -569,15 +632,15 @@ int main(int, char **)
         {
             ImVec2 mainDisplay = io.DisplaySize;
             memoryProcessesWindow("== Memory and Processes ==",
-                                  ImVec2((mainDisplay.x / 2) - 20, (mainDisplay.y / 2) + 30),
+                                  ImVec2((mainDisplay.x / 2) - 20, (mainDisplay.y / 2) + 50),
                                   ImVec2((mainDisplay.x / 2) + 10, 10));
             // --------------------------------------
             systemWindow("== System ==",
-                         ImVec2((mainDisplay.x / 2) - 10, (mainDisplay.y / 2) + 30),
+                         ImVec2((mainDisplay.x / 2) - 10, (mainDisplay.y / 2) + 50),
                          ImVec2(10, 10));
             // --------------------------------------
             networkWindow("== Network ==",
-                          ImVec2(mainDisplay.x - 20, (mainDisplay.y / 2) - 60),
+                          ImVec2(mainDisplay.x - 20, (mainDisplay.y / 2) - 40),
                           ImVec2(10, (mainDisplay.y / 2) + 50));
         }
 
