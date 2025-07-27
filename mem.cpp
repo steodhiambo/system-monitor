@@ -71,9 +71,17 @@ DiskInfo getDiskInfo(const string& path)
     struct statvfs stat;
 
     if (statvfs(path.c_str(), &stat) == 0) {
-        info.total = (long long)stat.f_blocks * stat.f_frsize;
-        info.available = (long long)stat.f_bavail * stat.f_frsize;
-        info.used = info.total - info.available;
+        // Calculate disk usage like 'df' command
+        long long total_blocks = stat.f_blocks;
+        long long free_blocks = stat.f_bfree;
+        long long available_blocks = stat.f_bavail;
+        long long block_size = stat.f_frsize;
+
+        info.total = total_blocks * block_size;
+        info.available = available_blocks * block_size;
+
+        // Used = Total - Free (this matches df calculation)
+        info.used = (total_blocks - free_blocks) * block_size;
 
         if (info.total > 0) {
             info.percentage = (double)info.used / info.total * 100.0;
