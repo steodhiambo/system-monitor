@@ -129,20 +129,32 @@ vector<int> getTaskCounts()
 
             if (stat_file.is_open()) {
                 string line;
-                getline(stat_file, line);
+                if (getline(stat_file, line) && !line.empty()) {
+                    // Find the state field - it's the 3rd field after PID and comm
+                    // comm can contain spaces and parentheses, so we need to parse carefully
+                    size_t first_paren = line.find('(');
+                    size_t last_paren = line.rfind(')');
 
-                // Parse the state field (3rd field after PID and comm)
-                istringstream iss(line);
-                string pid, comm, state;
-                iss >> pid >> comm >> state;
+                    if (first_paren != string::npos && last_paren != string::npos && last_paren > first_paren) {
+                        // Extract everything after the last parenthesis
+                        string after_comm = line.substr(last_paren + 1);
+                        istringstream iss(after_comm);
+                        string state;
+                        iss >> state; // First field after comm is the state
 
-                if (!state.empty()) {
-                    char s = state[0];
-                    switch (s) {
-                        case 'R': counts[0]++; break; // Running
-                        case 'S': case 'D': counts[1]++; break; // Sleeping
-                        case 'T': case 't': counts[2]++; break; // Stopped
-                        case 'Z': counts[3]++; break; // Zombie
+                        if (!state.empty()) {
+                            char s = state[0];
+                            switch (s) {
+                                case 'R': counts[0]++; break; // Running
+                                case 'S': case 'D': case 'I': counts[1]++; break; // Sleeping (including idle and uninterruptible)
+                                case 'T': case 't': counts[2]++; break; // Stopped
+                                case 'Z': counts[3]++; break; // Zombie
+                                default:
+                                    // Handle any other states as sleeping
+                                    counts[1]++;
+                                    break;
+                            }
+                        }
                     }
                 }
             }
