@@ -1,0 +1,86 @@
+# Compiled binaries and object files
+*.o
+*.obj
+*.exe
+monitor
+test_*
+!test_*.cpp
+!test_*.h
+
+# Build artifacts
+*.a
+*.so
+*.dylib
+*.dll
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ImGui configuration files
+imgui.ini
+
+# Shell scripts (project-specific choice)
+*.sh
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Core dumps
+core
+core.*
+
+# Debug files
+*.dSYM/
+*.pdb
+
+# CMake build files (if using CMake)
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+!Makefile
+
+# Package manager files
+node_modules/
+.npm/
+
+# Test output files
+test_output/
+*.test
+
+# Documentation build files
+docs/_build/
+*.pdf
+*.ps
+*.dvi
+
+# Profiling data
+*.prof
+gmon.out
+
+# Coverage files
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# Static analysis
+cppcheck-result.xml

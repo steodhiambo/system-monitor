@@ -116,3 +116,19 @@ $(EXE): $(OBJS)
 
 clean:
 	rm -f $(EXE) $(OBJS)
+
+# Clean all generated binaries and temporary files (preserves source files)
+clean-all: clean
+	rm -f test_functions test_system test_mem test_network test_gui_components test_formatting test_selection test_network_visual
+	rm -f *.tmp *.temp *.log
+	rm -f core core.*
+	rm -f imgui.ini
+	rm -f *.bak *.backup
+	@echo "All generated binaries and temporary files cleaned (source files preserved)"
+
+# Clean only compiled test binaries (preserves test source files)
+clean-tests:
+	rm -f test_functions test_system test_mem test_network test_gui_components test_formatting test_selection test_network_visual
+	@echo "Test binaries cleaned (test source files preserved)"
+
+.PHONY: all clean clean-all clean-tests
