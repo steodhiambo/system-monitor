@@ -1,6 +1,8 @@
 #include "header.h"
 #include <SDL.h>
 #include <algorithm>
+#include <map>
+#include <cmath>
 
 /*
 NOTE : You are free to change the code as you wish, the main objective is to make the
@@ -58,10 +60,7 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
 
     // System Information Section
     ImGui::Separator();
-    ImGui::Text("=== SYSTEM INFORMATION ===");
-    ImGui::Separator();
     ImGui::Spacing();
-    ImGui::Separator();
 
     ImGui::Text("Operating System: %s", getOsName());
     ImGui::Text("User: %s", getLoggedUser().c_str());
@@ -76,9 +75,6 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
 
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Text("=== SYSTEM MONITORING TABS ===");
-    ImGui::Separator();
-    ImGui::Spacing();
 
     // Tabbed section for CPU, Fan, Thermal
     if (ImGui::BeginTabBar("SystemTabs")) {
@@ -94,7 +90,7 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
             prevCPUStats = currentCPU;
             firstRun = false;
 
-            if (cpuGraph.animate) {
+            if (cpuGraph.animate && cpuGraph.shouldUpdate()) {
                 cpuGraph.addValue(cpuUsage);
             }
 
@@ -120,21 +116,33 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
             int fanSpeed = getFanSpeed();
 
             ImGui::Text("Fan Status: %s", fanStatus.c_str());
-            ImGui::Text("Fan Speed: %d RPM", fanSpeed);
 
-            if (fanGraph.animate) {
+            if (fanSpeed >= 0) {
+                ImGui::Text("Fan Speed: %d RPM", fanSpeed);
+            } else {
+                ImGui::Text("Fan Speed: Not Available");
+            }
+
+            if (fanGraph.animate && fanSpeed >= 0 && fanGraph.shouldUpdate()) {
                 fanGraph.addValue(fanSpeed);
             }
 
             // Graph controls
             ImGui::Checkbox("Animate##Fan", &fanGraph.animate);
             ImGui::SliderFloat("FPS##Fan", &fanGraph.fps, 1.0f, 120.0f);
-            ImGui::SliderFloat("Y Scale##Fan", &fanGraph.y_scale, 1000.0f, 5000.0f);
+            ImGui::SliderFloat("Y Scale##Fan", &fanGraph.y_scale, 10.0f, 5000.0f);
 
             // Fan Speed Graph
             if (!fanGraph.values.empty()) {
+                // Auto-adjust Y scale for low fan speeds
+                float max_value = *max_element(fanGraph.values.begin(), fanGraph.values.end());
+                float auto_scale = max(max_value * 1.2f, 50.0f); // At least 50 RPM scale
+
+                ImGui::Text("Current: %.0f RPM, Max: %.0f RPM", fanGraph.values.back(), max_value);
                 ImGui::PlotLines("Fan Speed", fanGraph.values.data(), fanGraph.values.size(),
-                               0, nullptr, 0.0f, fanGraph.y_scale, ImVec2(0, 80));
+                               0, nullptr, 0.0f, min(fanGraph.y_scale, auto_scale), ImVec2(0, 80));
+            } else {
+                ImGui::Text("No fan data available - check if animate is enabled");
             }
 
             ImGui::EndTabItem();
@@ -146,7 +154,7 @@ void systemWindow(const char *id, ImVec2 size, ImVec2 position)
 
             ImGui::Text("Temperature: %.1f°C", temperature);
 
-            if (thermalGraph.animate) {
+            if (thermalGraph.animate && thermalGraph.shouldUpdate()) {
                 thermalGraph.addValue(temperature);
             }
 
@@ -198,10 +206,7 @@ void memoryProcessesWindow(const char *id, ImVec2 size, ImVec2 position)
 
     // Memory Usage Section
     ImGui::Separator();
-    ImGui::Text("=== MEMORY AND PROCESS MONITOR ===");
-    ImGui::Separator();
     ImGui::Spacing();
-    ImGui::Separator();
 
     // RAM Usage
     MemoryInfo ramInfo = getMemoryInfo();
@@ -285,23 +290,102 @@ void memoryProcessesWindow(const char *id, ImVec2 size, ImVec2 position)
                 }
             }
 
-            // Name column
+            // Name column with anti-flickering
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text("%s", proc.name.c_str());
+            static map<int, pair<string, double>> cached_names; // pid -> (name, last_update_time)
+            static double last_name_update = 0.0;
 
-            // State column
+            double current_time = SDL_GetTicks() / 1000.0;
+            string display_name;
+
+            // Update names every 2 seconds to prevent flickering
+            if (current_time - last_name_update > 2.0 || cached_names.find(proc.pid) == cached_names.end()) {
+                display_name = proc.name;
+                cached_names[proc.pid] = make_pair(display_name, current_time);
+                if (proc.pid == 1) last_name_update = current_time;
+            } else {
+                display_name = cached_names[proc.pid].first;
+            }
+            ImGui::Text("%s", display_name.c_str());
+
+            // State column with anti-flickering
             ImGui::TableSetColumnIndex(2);
-            ImGui::Text("%c", proc.state);
+            static map<int, pair<char, double>> cached_states; // pid -> (state, last_update_time)
+            static double last_state_update = 0.0;
 
-            // CPU % column
+            char display_state;
+
+            // Update states every 2 seconds to prevent flickering
+            if (current_time - last_state_update > 2.0 || cached_states.find(proc.pid) == cached_states.end()) {
+                display_state = proc.state;
+                cached_states[proc.pid] = make_pair(display_state, current_time);
+                if (proc.pid == 1) last_state_update = current_time;
+            } else {
+                display_state = cached_states[proc.pid].first;
+            }
+            ImGui::Text("%c", display_state);
+
+            // CPU % column with ultra-stable anti-flickering
             ImGui::TableSetColumnIndex(3);
-            double cpuUsage = getProcessCPUUsage(proc.pid);
-            ImGui::Text("%.1f", cpuUsage);
+            static map<int, pair<double, double>> cached_cpu; // pid -> (cpu_value, last_update_time)
+            static map<int, double> stable_cpu; // pid -> stable display value
+            static double last_cpu_update = 0.0;
 
-            // Memory % column
+            double cpu_value = 0.0;
+
+            // Update CPU values every 3 seconds for maximum stability
+            if (current_time - last_cpu_update > 3.0 || cached_cpu.find(proc.pid) == cached_cpu.end()) {
+                double raw_cpu = getProcessCPUUsage(proc.pid);
+
+                // Apply heavy stabilization
+                if (stable_cpu.find(proc.pid) == stable_cpu.end()) {
+                    // First time - use raw value
+                    stable_cpu[proc.pid] = raw_cpu;
+                } else {
+                    // Apply very conservative smoothing to prevent flickering
+                    double current_stable = stable_cpu[proc.pid];
+                    double diff = abs(raw_cpu - current_stable);
+
+                    // Only update if change is significant AND consistent
+                    if (diff > 5.0) {
+                        // Big change: use moderate smoothing
+                        stable_cpu[proc.pid] = 0.3 * raw_cpu + 0.7 * current_stable;
+                    } else if (diff > 1.0) {
+                        // Small change: use very conservative smoothing
+                        stable_cpu[proc.pid] = 0.1 * raw_cpu + 0.9 * current_stable;
+                    }
+                    // Changes < 1% are ignored to prevent flickering
+                }
+
+                // Round to whole numbers for maximum stability
+                cpu_value = round(stable_cpu[proc.pid]);
+                cached_cpu[proc.pid] = make_pair(cpu_value, current_time);
+
+                if (proc.pid == 1) last_cpu_update = current_time;
+            } else {
+                cpu_value = cached_cpu[proc.pid].first;
+            }
+
+            ImGui::Text("%.0f", cpu_value);
+
+            // Memory % column with anti-flickering
             ImGui::TableSetColumnIndex(4);
-            double memUsage = getProcessMemoryUsage(proc.pid);
-            ImGui::Text("%.1f", memUsage);
+            static map<int, pair<double, double>> cached_memory; // pid -> (memory_value, last_update_time)
+            static double last_memory_update = 0.0;
+
+            double memory_value = 0.0;
+
+            // Update memory every 2 seconds to prevent flickering
+            if (current_time - last_memory_update > 2.0 || cached_memory.find(proc.pid) == cached_memory.end()) {
+                memory_value = getProcessMemoryUsage(proc.pid);
+                // Round to prevent micro-fluctuations
+                memory_value = round(memory_value * 10.0) / 10.0;
+                cached_memory[proc.pid] = make_pair(memory_value, current_time);
+                if (proc.pid == 1) last_memory_update = current_time;
+            } else {
+                memory_value = cached_memory[proc.pid].first;
+            }
+            ImGui::Text("%.1f", memory_value);
         }
 
         ImGui::EndTable();
@@ -335,10 +419,7 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
 
     // Network Interfaces Section
     ImGui::Separator();
-    ImGui::Text("=== NETWORK MONITOR ===");
-    ImGui::Separator();
     ImGui::Spacing();
-    ImGui::Separator();
 
     vector<NetworkInterface> interfaces = getNetworkInterfaces();
 
@@ -356,8 +437,6 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
         // RX Tab
         if (ImGui::BeginTabItem("RX (Receiver)")) {
             // Visual representation with progress bars
-            ImGui::Text("=== NETWORK RECEIVER (RX) VISUAL USAGE ===");
-            ImGui::Separator();
             ImGui::Spacing();
 
             for (const auto& iface : interfaces) {
@@ -375,7 +454,6 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
             }
 
             ImGui::Separator();
-            ImGui::Text("=== DETAILED RX DATA TABLE ===");
             ImGui::Spacing();
 
             if (ImGui::BeginTable("RXTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
@@ -432,8 +510,6 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
         // TX Tab
         if (ImGui::BeginTabItem("TX (Transmitter)")) {
             // Visual representation with progress bars
-            ImGui::Text("=== NETWORK TRANSMITTER (TX) VISUAL USAGE ===");
-            ImGui::Separator();
             ImGui::Spacing();
 
             for (const auto& iface : interfaces) {
@@ -451,7 +527,6 @@ void networkWindow(const char *id, ImVec2 size, ImVec2 position)
             }
 
             ImGui::Separator();
-            ImGui::Text("=== DETAILED TX DATA TABLE ===");
             ImGui::Spacing();
 
             if (ImGui::BeginTable("TXTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
@@ -604,6 +679,9 @@ int main(int, char **)
     // background color
     // note : you are free to change the style of the application
     ImVec4 clear_color = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+
+    // Initialize CPU measurements for all processes
+    initializeCPUMeasurements();
 
     // Main loop
     bool done = false;
