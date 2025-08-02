@@ -115,6 +115,10 @@ double calculateCPUUsage(const CPUStats& prev, const CPUStats& curr)
 // Get task counts from /proc/stat and process directories
 vector<int> getTaskCounts()
 {
+    static vector<int> smoothed_counts(4, 0); // Smoothed values
+    static vector<int> last_counts(4, 0);     // Previous raw values
+    static int update_counter = 0;            // Update frequency control
+
     vector<int> counts(4, 0); // [running, sleeping, stopped, zombie]
 
     DIR* proc_dir = opendir("/proc");
@@ -162,7 +166,33 @@ vector<int> getTaskCounts()
     }
 
     closedir(proc_dir);
-    return counts;
+
+    // Implement smoothing to prevent flickering
+    update_counter++;
+
+    // Update smoothed values every 5 calls (reduces update frequency)
+    if (update_counter >= 5) {
+        update_counter = 0;
+
+        // Apply exponential smoothing: new_value = 0.7 * current + 0.3 * previous
+        for (int i = 0; i < 4; i++) {
+            // Only update if change is significant (more than 2 processes)
+            if (abs(counts[i] - last_counts[i]) > 2) {
+                smoothed_counts[i] = (int)(0.7 * counts[i] + 0.3 * smoothed_counts[i]);
+            }
+            last_counts[i] = counts[i];
+        }
+    }
+
+    // Return smoothed values if they exist, otherwise return current counts
+    if (smoothed_counts[0] == 0 && smoothed_counts[1] == 0 &&
+        smoothed_counts[2] == 0 && smoothed_counts[3] == 0) {
+        // First run - initialize smoothed values
+        smoothed_counts = counts;
+        return counts;
+    }
+
+    return smoothed_counts;
 }
 
 // Get thermal temperature
@@ -180,6 +210,7 @@ double getThermalTemp()
 // Get fan status
 string getFanStatus()
 {
+    // Try ACPI fan interface first
     ifstream fan_file("/proc/acpi/fan/FAN0/state");
     if (fan_file.is_open()) {
         string line;
@@ -190,26 +221,72 @@ string getFanStatus()
             return "Inactive";
         }
     }
+
+    // Try hwmon interface - if fan speed > 0, it's active
+    int speed = getFanSpeed();
+    if (speed > 0) {
+        return "Active (" + to_string(speed) + " RPM)";
+    } else if (speed == 0) {
+        return "Inactive (0 RPM)";
+    } else if (speed == -1) {
+        return "Not Detected";
+    }
+
     return "Unknown";
 }
 
 // Get fan speed (RPM)
 int getFanSpeed()
 {
-    // Try different possible fan speed locations
+    // Try comprehensive fan speed locations
     vector<string> fan_paths = {
         "/sys/class/hwmon/hwmon0/fan1_input",
         "/sys/class/hwmon/hwmon1/fan1_input",
-        "/sys/class/hwmon/hwmon2/fan1_input"
+        "/sys/class/hwmon/hwmon2/fan1_input",
+        "/sys/class/hwmon/hwmon3/fan1_input",
+        "/sys/class/hwmon/hwmon4/fan1_input",
+        "/sys/class/hwmon/hwmon5/fan1_input",
+        "/sys/class/hwmon/hwmon6/fan1_input",
+        "/sys/class/hwmon/hwmon7/fan1_input",
+        "/sys/class/hwmon/hwmon8/fan1_input",
+        "/sys/class/hwmon/hwmon9/fan1_input",
+        "/sys/class/hwmon/hwmon0/fan2_input",
+        "/sys/class/hwmon/hwmon1/fan2_input",
+        "/sys/devices/platform/thinkpad_hwmon/hwmon/hwmon8/fan1_input",
+        "/sys/class/thermal/cooling_device0/cur_state",
+        "/sys/class/thermal/cooling_device1/cur_state",
+        "/proc/acpi/ibm/fan"  // ThinkPad specific
     };
 
     for (const string& path : fan_paths) {
         ifstream fan_file(path);
         if (fan_file.is_open()) {
-            int speed;
-            fan_file >> speed;
-            return speed;
+            if (path.find("ibm/fan") != string::npos) {
+                // ThinkPad fan format: "speed: 3456"
+                string line;
+                while (getline(fan_file, line)) {
+                    if (line.find("speed:") != string::npos) {
+                        size_t pos = line.find("speed:");
+                        if (pos != string::npos) {
+                            string speed_str = line.substr(pos + 6);
+                            try {
+                                return stoi(speed_str);
+                            } catch (...) {
+                                continue;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Standard hwmon format
+                int speed;
+                if (fan_file >> speed) {
+                    if (speed > 0) return speed;
+                }
+            }
         }
     }
-    return 0;
+
+    // If no fan found, return -1 to indicate "not detected"
+    return -1;
 }
