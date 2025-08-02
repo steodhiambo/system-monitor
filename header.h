@@ -5,6 +5,7 @@
 #include "imgui.h"
 #include "imgui_impl_sdl.h"
 #include "imgui_impl_opengl3.h"
+#include <SDL.h>
 #include <stdio.h>
 #include <dirent.h>
 #include <vector>
@@ -115,8 +116,20 @@ struct GraphData {
     bool animate;
     float fps;
     float y_scale;
+    double last_update_time;
 
-    GraphData(int max = 100) : max_values(max), animate(true), fps(60.0f), y_scale(100.0f) {}
+    GraphData(int max = 100) : max_values(max), animate(true), fps(60.0f), y_scale(100.0f), last_update_time(0.0) {}
+
+    bool shouldUpdate() {
+        double current_time = SDL_GetTicks() / 1000.0; // Get time in seconds
+        double time_per_frame = 1.0 / fps;
+
+        if (current_time - last_update_time >= time_per_frame) {
+            last_update_time = current_time;
+            return true;
+        }
+        return false;
+    }
 
     void addValue(float value) {
         values.push_back(value);
@@ -145,6 +158,7 @@ MemoryInfo getMemoryInfo();
 MemoryInfo getSwapInfo();
 DiskInfo getDiskInfo(const string& path = "/");
 vector<Proc> getProcesses();
+void initializeCPUMeasurements();
 double getProcessCPUUsage(int pid);
 double getProcessMemoryUsage(int pid);
 
